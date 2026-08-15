@@ -83,3 +83,42 @@ class LoginSerializer(serializers.Serializer):
         attrs["access"] = str(refresh.access_token)
 
         return attrs
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "email",
+            "phone_number",
+            "first_name",
+            "last_name",
+            "role",
+            "is_verified",
+            "date_joined",
+        )
+        read_only_fields = (
+            "id",
+            "email",
+            "role",
+            "is_verified",
+            "date_joined",
+        )
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
+    def validate(self, attrs):
+        self.token = attrs["refresh"]
+        return attrs
+
+    def save(self, **kwargs):
+        try:
+            token = RefreshToken(self.token)
+            token.blacklist()
+        except Exception:
+            raise serializers.ValidationError(
+                {"refresh": "Invalid or already blacklisted refresh token."}
+            )

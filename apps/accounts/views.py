@@ -5,8 +5,9 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 
-from .serializers import RegisterSerializer,LoginSerializer
+from .serializers import RegisterSerializer,LoginSerializer,UserSerializer,LogoutSerializer
 
 
 class RegisterAPIView(APIView):
@@ -59,6 +60,35 @@ class LoginAPIView(APIView):
                     "last_name": user.last_name,
                     "role": user.role,
                 },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class MeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = UserSerializer(request.user)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class LogoutAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = LogoutSerializer(data=request.data)
+
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(
+            {
+                "message": "Logout successful."
             },
             status=status.HTTP_200_OK,
         )
