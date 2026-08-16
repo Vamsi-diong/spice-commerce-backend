@@ -7,7 +7,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from .serializers import RegisterSerializer,LoginSerializer,UserSerializer,LogoutSerializer
+from apps.accounts.models import Address
+
+from .serializers import RegisterSerializer,LoginSerializer,UserSerializer,LogoutSerializer,AddressSerializer
+from rest_framework.generics import (
+    ListCreateAPIView,
+    RetrieveUpdateDestroyAPIView,
+)
 
 
 class RegisterAPIView(APIView):
@@ -91,4 +97,26 @@ class LogoutAPIView(APIView):
                 "message": "Logout successful."
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class AddressListCreateAPIView(ListCreateAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Address.objects.filter(
+            user=self.request.user
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class AddressDetailAPIView(RetrieveUpdateDestroyAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Address.objects.filter(
+            user=self.request.user
         )

@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate, get_user_model
+from .models import Address
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -122,3 +123,29 @@ class LogoutSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"refresh": "Invalid or already blacklisted refresh token."}
             )
+
+
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = (
+            "id",
+            "address_type",
+            "full_name",
+            "phone_number",
+            "address_line_1",
+            "address_line_2",
+            "landmark",
+            "city",
+            "state",
+            "pincode",
+            "country",
+            "is_default",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "created_at",
+            "updated_at",
+        )
