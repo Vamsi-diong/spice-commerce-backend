@@ -2,7 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from .views import RegisterAPIView,LoginAPIView,MeAPIView,LogoutAPIView,AddressDetailAPIView,AddressListCreateAPIView,LoginAPIView,LogoutAPIView
+from .views import RegisterAPIView,LoginAPIView,MeAPIView,LogoutAPIView,AddressDetailAPIView,AddressListCreateAPIView,LoginAPIView,LogoutAPIView,PhoneChangeAPIView,PhoneVerifyAPIView
 
 
 urlpatterns = [
@@ -14,5 +14,7 @@ urlpatterns = [
     path("logout/",LogoutAPIView.as_view(),name="logout",),
     path("addresses/",AddressListCreateAPIView.as_view(),name="address-list-create",),
     path("addresses/<int:pk>/",AddressDetailAPIView.as_view(),name="address-detail",),
+    path("phone/change/",PhoneChangeAPIView.as_view(),name="phone-change",),
+    path("phone/verify/",PhoneVerifyAPIView.as_view(),name="phone-verify",),
 
 ]

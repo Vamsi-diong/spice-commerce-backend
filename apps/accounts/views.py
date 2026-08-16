@@ -6,10 +6,10 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
-
+from .services import create_phone_verification_otp,verify_phone_otp
 from apps.accounts.models import Address
 
-from .serializers import RegisterSerializer,LoginSerializer,UserSerializer,LogoutSerializer,AddressSerializer
+from .serializers import RegisterSerializer,LoginSerializer,UserSerializer,LogoutSerializer,AddressSerializer,PhoneChangeSerializer,PhoneVerifySerializer
 from rest_framework.generics import (
     ListCreateAPIView,
     RetrieveUpdateDestroyAPIView,
@@ -135,4 +135,68 @@ class AddressDetailAPIView(RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return Address.objects.filter(
             user=self.request.user
+        )
+
+
+class PhoneChangeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PhoneChangeSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        phone_number = serializer.validated_data["phone_number"]
+
+        verification, otp = create_phone_verification_otp(
+            user=request.user,
+            phone_number=phone_number,
+        )
+
+        return Response(
+            {
+                "message": "OTP generated successfully.",
+                "phone_number": phone_number,
+                "expires_in": 300,
+                "otp": otp,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+class PhoneVerifyAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PhoneVerifySerializer(
+            data=request.data,
+        )
+
+        serializer.is_valid(raise_exception=True)
+
+        phone_number = serializer.validated_data["phone_number"]
+        otp = serializer.validated_data["otp"]
+
+        success, message = verify_phone_otp(
+            user=request.user,
+            phone_number=phone_number,
+            otp=otp,
+        )
+
+        if not success:
+            return Response(
+                {
+                    "message": message,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {
+                "message": message,
+                "phone_number": phone_number,
+            },
+            status=status.HTTP_200_OK,
         )

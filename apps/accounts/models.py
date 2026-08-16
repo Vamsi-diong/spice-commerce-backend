@@ -3,6 +3,9 @@ from django.db import models
 # Create your models here.
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+import secrets
+from django.utils import timezone
+from datetime import timedelta
 
 
 
@@ -199,3 +202,39 @@ class Address(models.Model):
 
     def __str__(self):
         return f"{self.full_name} - {self.city}"
+
+
+class PhoneVerificationOTP(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="phone_verification_otps",
+    )
+
+    phone_number = models.CharField(
+        max_length=15,
+    )
+
+    otp_hash = models.CharField(
+        max_length=128,
+    )
+
+    expires_at = models.DateTimeField()
+
+    attempts = models.PositiveSmallIntegerField(
+        default=0,
+    )
+
+    is_used = models.BooleanField(
+        default=False,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def __str__(self):
+        return f"Phone verification for {self.phone_number}"

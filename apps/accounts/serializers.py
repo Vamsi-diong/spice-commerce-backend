@@ -149,3 +149,26 @@ class AddressSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+
+class PhoneChangeSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15)
+
+    def validate_phone_number(self, value):
+        user = self.context["request"].user
+
+        if User.objects.filter(phone_number=value).exclude(
+            id=user.id
+        ).exists():
+            raise serializers.ValidationError(
+                "This phone number is already registered."
+            )
+
+        return value
+
+class PhoneVerifySerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=15)
+    otp = serializers.CharField(
+        min_length=6,
+        max_length=6,
+    )
