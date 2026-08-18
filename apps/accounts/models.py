@@ -3,9 +3,7 @@ from django.db import models
 # Create your models here.
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-import secrets
 from django.utils import timezone
-from datetime import timedelta
 
 
 
@@ -14,13 +12,12 @@ class UserManager(BaseUserManager):
     Custom manager for the User model.
     """
 
-    def create_user(self, email, password=None, **extra_fields):
-        if not email:
-            raise ValueError("The email address is required.")
-
-        email = self.normalize_email(email)
+    def create_user(self, phone_number, email=None, password=None, **extra_fields):
+        if not phone_number:
+            raise ValueError("The phone number is required.")
 
         user = self.model(
+            phone_number=phone_number,
             email=email,
             **extra_fields,
         )
@@ -35,13 +32,16 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("Superuser must have an email.")
+
+        if not password:
+            raise ValueError("Superuser must have a password.")
+
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
         extra_fields.setdefault("role", self.model.Role.ADMIN)
-
-        if not password:
-            raise ValueError("Superuser must have a password.")
 
         if extra_fields.get("is_staff") is not True:
             raise ValueError("Superuser must have is_staff=True.")
@@ -49,15 +49,15 @@ class UserManager(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
 
-        return self.create_user(
+        user = self.model(
             email=email,
-            password=password,
             **extra_fields,
         )
 
+        user.set_password(password)
+        user.save(using=self._db)
 
-from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-from django.db import models
+        return user
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -72,7 +72,12 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     email = models.EmailField(
         unique=True,
+        null=True,
+        blank=True,
         db_index=True,
+    )
+    email_verified = models.BooleanField(
+        default=False,
     )
 
     phone_number = models.CharField(
@@ -80,10 +85,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         unique=True,
         null=True,
         blank=True,
+        db_index=True,
     )
 
     first_name = models.CharField(
         max_length=100,
+        blank=True,
     )
 
     last_name = models.CharField(
@@ -98,33 +105,25 @@ class User(AbstractBaseUser, PermissionsMixin):
         db_index=True,
     )
 
-    is_verified = models.BooleanField(
-        default=False,
-    )
+    is_verified = models.BooleanField(default=False)
 
-    is_active = models.BooleanField(
-        default=True,
-    )
+    profile_completed = models.BooleanField(default=False)
 
-    is_staff = models.BooleanField(
-        default=False,
-    )
+    is_active = models.BooleanField(default=True)
 
-    date_joined = models.DateTimeField(
-        auto_now_add=True,
-    )
+    is_staff = models.BooleanField(default=False)
 
-    updated_at = models.DateTimeField(
-        auto_now=True,
-    )
+    date_joined = models.DateTimeField(auto_now_add=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
 
     objects = UserManager()
 
-    USERNAME_FIELD = "email"
+    USERNAME_FIELD = "phone_number"
     REQUIRED_FIELDS = []
 
     def __str__(self):
-        return self.email
+        return self.phone_number or self.email or f"User {self.id}"
 
 
 class Address(models.Model):
@@ -204,15 +203,21 @@ class Address(models.Model):
         return f"{self.full_name} - {self.city}"
 
 
+
 class PhoneVerificationOTP(models.Model):
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="phone_verification_otps",
-    )
+
+    class Purpose(models.TextChoices):
+        LOGIN = "LOGIN", "Login"
+        PHONE_CHANGE = "PHONE_CHANGE", "Phone Change"       
 
     phone_number = models.CharField(
         max_length=15,
+        db_index=True,
+    )
+
+    purpose = models.CharField(
+        max_length=30,
+        choices=Purpose.choices,
     )
 
     otp_hash = models.CharField(
@@ -237,4 +242,41 @@ class PhoneVerificationOTP(models.Model):
         return timezone.now() >= self.expires_at
 
     def __str__(self):
-        return f"Phone verification for {self.phone_number}"
+        return f"{self.phone_number} - {self.purpose}"
+
+
+class EmailVerificationOTP(models.Model):
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="email_verification_otps",
+    )
+
+    email = models.EmailField(
+        db_index=True,
+    )
+
+    otp_hash = models.CharField(
+        max_length=128,
+    )
+
+    expires_at = models.DateTimeField()
+
+    attempts = models.PositiveSmallIntegerField(
+        default=0,
+    )
+
+    is_used = models.BooleanField(
+        default=False,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def __str__(self):
+        return f"{self.email} - Email Verification"

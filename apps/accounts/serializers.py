@@ -97,14 +97,62 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "role",
             "is_verified",
+            "profile_completed",
             "date_joined",
         )
+
         read_only_fields = (
             "id",
-            "email",
+            "phone_number",
             "role",
             "is_verified",
+            "profile_completed",
             "date_joined",
+        )
+
+    def validate_email(self, value):
+        user = self.instance
+
+        if User.objects.filter(
+            email=value
+        ).exclude(
+            id=user.id
+        ).exists():
+            raise serializers.ValidationError(
+                "This email is already registered."
+            )
+
+        return value
+
+    def update(self, instance, validated_data):
+        user = super().update(
+            instance,
+            validated_data,
+        )
+
+        self.update_profile_completion(user)
+
+        return user
+
+    @staticmethod
+    def update_profile_completion(user):
+        has_basic_details = all(
+            [
+                user.first_name.strip(),
+                user.last_name.strip(),
+                user.email,
+            ]
+        )
+
+        has_address = user.addresses.exists()
+
+        user.profile_completed = (
+            has_basic_details
+            and has_address
+        )
+
+        user.save(
+            update_fields=["profile_completed"]
         )
 
 
@@ -172,3 +220,100 @@ class PhoneVerifySerializer(serializers.Serializer):
         min_length=6,
         max_length=6,
     )
+
+
+class RequestOTPSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(
+        max_length=15,
+    )
+
+    def validate_phone_number(self, value):
+        value = value.strip()
+
+        if not value.isdigit():
+            raise serializers.ValidationError(
+                "Phone number must contain only digits."
+            )
+
+        if len(value) < 10 or len(value) > 15:
+            raise serializers.ValidationError(
+                "Enter a valid phone number."
+            )
+
+        return value
+
+
+class VerifyLoginOTPSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(
+        max_length=15,
+    )
+
+    otp = serializers.CharField(
+        min_length=6,
+        max_length=6,
+    )
+
+    def validate_phone_number(self, value):
+        value = value.strip()
+
+        if not value.isdigit():
+            raise serializers.ValidationError(
+                "Phone number must contain only digits."
+            )
+
+        if len(value) < 10 or len(value) > 15:
+            raise serializers.ValidationError(
+                "Enter a valid phone number."
+            )
+
+        return value
+
+    def validate_otp(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError(
+                "OTP must contain only digits."
+            )
+
+        return value
+
+
+class AddEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        user = self.context["request"].user
+
+        if User.objects.filter(
+            email=value
+        ).exclude(
+            id=user.id
+        ).exists():
+            raise serializers.ValidationError(
+                "This email is already registered."
+            )
+
+        if (
+            user.email == value
+            and user.email_verified
+        ):
+            raise serializers.ValidationError(
+                "This email is already verified."
+            )
+
+        return value
+
+class VerifyEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    otp = serializers.CharField(
+        min_length=6,
+        max_length=6,
+    )
+
+    def validate_otp(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError(
+                "OTP must contain only digits."
+            )
+
+        return value
