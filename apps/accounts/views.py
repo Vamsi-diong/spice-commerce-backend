@@ -2,6 +2,8 @@ from django.shortcuts import render
 
 # Create your views here.
 from rest_framework import status
+from rest_framework import generics
+from rest_framework import permissions
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -244,7 +246,27 @@ class AddressListCreateAPIView(ListCreateAPIView):
     def perform_create(self, serializer):
         user = self.request.user
 
-        serializer.save(user=user)
+        has_existing_addresses = user.addresses.exists()
+
+        is_default = serializer.validated_data.get(
+            "is_default",
+            False,
+        )
+
+        if not has_existing_addresses:
+            is_default = True
+
+        if is_default:
+            user.addresses.filter(
+                is_default=True,
+            ).update(
+                is_default=False,
+            )
+
+        serializer.save(
+            user=user,
+            is_default=is_default,
+        )
 
         if (
             user.first_name.strip()
@@ -257,14 +279,54 @@ class AddressListCreateAPIView(ListCreateAPIView):
                 update_fields=["profile_completed"]
             )
 
-class AddressDetailAPIView(RetrieveUpdateDestroyAPIView):
+class AddressDetailAPIView(
+    generics.RetrieveUpdateDestroyAPIView
+):
     serializer_class = AddressSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = (
+        permissions.IsAuthenticated,
+    )
 
     def get_queryset(self):
         return Address.objects.filter(
-            user=self.request.user
+            user=self.request.user,
         )
+
+    def perform_update(self, serializer):
+        user = self.request.user
+
+        is_default = serializer.validated_data.get(
+            "is_default",
+            None,
+        )
+
+        if is_default is True:
+            user.addresses.filter(
+                is_default=True,
+            ).exclude(
+                id=serializer.instance.id,
+            ).update(
+                is_default=False,
+            )
+
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        was_default = instance.is_default
+
+        instance.delete()
+
+        if was_default:
+            new_default = user.addresses.order_by(
+                "-created_at",
+            ).first()
+
+            if new_default:
+                new_default.is_default = True
+                new_default.save(
+                    update_fields=["is_default"],
+                )
 
 
 class PhoneChangeAPIView(APIView):

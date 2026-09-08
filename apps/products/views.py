@@ -61,12 +61,19 @@ class CategoryListAPIView(generics.ListAPIView):
 
 class CategoryDetailAPIView(generics.RetrieveAPIView):
     serializer_class = CategorySerializer
+
     lookup_field = "slug"
 
     def get_queryset(self):
         return Category.objects.filter(
             is_active=True,
             collection__is_active=True,
+        )
+
+    def get_object(self):
+        return self.get_queryset().get(
+            collection__slug=self.kwargs["collection_slug"],
+            slug=self.kwargs["slug"],
         )
 
 
