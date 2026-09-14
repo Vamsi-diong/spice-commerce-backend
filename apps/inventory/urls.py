@@ -1,7 +1,8 @@
 from django.urls import path
 
 from .views import (AddCartItemAPIView,CartAPIView,UpdateCartItemAPIView,CheckoutAPIView,OrderListAPIView, OrderDetailAPIView, CancelOrderAPIView, UpdateOrderStatusAPIView, AdminOrderListAPIView, AdminOrderDetailAPIView,CreatePaymentAPIView, PaymentSuccessAPIView, PaymentFailureAPIView,CollectCODPaymentAPIView,
-AdminPaymentSuccessAPIView,AdminPaymentListAPIView,AdminPaymentDetailAPIView,AdminPaymentFailureAPIView,AdminOrderStatusHistoryAPIView,AdminRefundAPIView,AdminRefundListAPIView,AdminRefundDetailAPIView)
+AdminPaymentSuccessAPIView,AdminPaymentListAPIView,AdminPaymentDetailAPIView,AdminPaymentFailureAPIView,AdminOrderStatusHistoryAPIView,AdminRefundAPIView,AdminRefundListAPIView,AdminRefundDetailAPIView, AdminPromotionListCreateAPIView, AdminPromotionDetailAPIView, ReviewCreateAPIView, ReviewListCreateAPIView,
+AdminReviewListAPIView, AdminReviewModerationAPIView)
 
 urlpatterns = [
 
@@ -27,5 +28,10 @@ urlpatterns = [
     path("admin/payments/<int:payment_id>/refund/",AdminRefundAPIView.as_view(),name="admin-payment-refund",),
     path("admin/refunds/",AdminRefundListAPIView.as_view(),name="admin-refund-list",),
     path("admin/refunds/<int:refund_id>/",AdminRefundDetailAPIView.as_view(),name="admin-refund-detail",),
+    path("admin/promotions/",AdminPromotionListCreateAPIView.as_view(),name="admin-promotion-list-create",),
+    path("admin/promotions/<int:promotion_id>/",AdminPromotionDetailAPIView.as_view(),name="admin-promotion-detail",),
+    path("reviews/",ReviewListCreateAPIView.as_view(),name="review-list-create",),
+    path("admin/reviews/",AdminReviewListAPIView.as_view(),name="admin-review-list",),
+    path("admin/reviews/<int:review_id>/",AdminReviewModerationAPIView.as_view(),name="admin-review-moderation",),
 
 ]
