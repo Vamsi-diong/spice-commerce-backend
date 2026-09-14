@@ -29,7 +29,7 @@ SECRET_KEY = config("DJANGO_SECRET_KEY")
 DEBUG = config("DJANGO_DEBUG", default=False, cast=bool)
 
 ALLOWED_HOSTS = [
-    "the-black-taj-spices.vercel.app",
+    ".vercel.app",
 ]
 
 # Application definition
