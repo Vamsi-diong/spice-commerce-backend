@@ -6,6 +6,7 @@ from .models import (
     Item,
     ItemImage,
     Package,
+    PackageImage,
     PackageItem,
 )
 
@@ -145,6 +146,16 @@ class ItemDetailSerializer(serializers.ModelSerializer):
         )
 
 
+class PackageImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PackageImage
+        fields = (
+            "id",
+            "image",
+            "is_primary",
+        )
+
+
 class PackageItemSerializer(serializers.ModelSerializer):
     item = ItemListSerializer(
         read_only=True,
@@ -160,6 +171,21 @@ class PackageItemSerializer(serializers.ModelSerializer):
 
 
 class PackageListSerializer(serializers.ModelSerializer):
+    collection = serializers.CharField(
+        source="collection.name",
+        read_only=True,
+    )
+
+    collection_slug = serializers.CharField(
+        source="collection.slug",
+        read_only=True,
+    )
+
+    images = PackageImageSerializer(
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = Package
         fields = (
@@ -172,10 +198,28 @@ class PackageListSerializer(serializers.ModelSerializer):
             "mrp",
             "selling_price",
             "is_featured",
+            "collection",
+            "collection_slug",
+            "images",
         )
 
 
 class PackageDetailSerializer(serializers.ModelSerializer):
+    collection = serializers.CharField(
+        source="collection.name",
+        read_only=True,
+    )
+
+    collection_slug = serializers.CharField(
+        source="collection.slug",
+        read_only=True,
+    )
+
+    images = PackageImageSerializer(
+        many=True,
+        read_only=True,
+    )
+
     package_items = PackageItemSerializer(
         many=True,
         read_only=True,
@@ -194,5 +238,8 @@ class PackageDetailSerializer(serializers.ModelSerializer):
             "mrp",
             "selling_price",
             "is_featured",
+            "collection",
+            "collection_slug",
+            "images",
             "package_items",
         )

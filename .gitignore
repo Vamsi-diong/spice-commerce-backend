@@ -34,3 +34,4 @@ htmlcov/
 poetry.toml
 
 items/
+packages/

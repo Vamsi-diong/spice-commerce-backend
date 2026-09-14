@@ -6,6 +6,7 @@ from .models import (
     Item,
     ItemImage,
     Package,
+    PackageImage,
     PackageItem,
 )
 
@@ -198,10 +199,16 @@ class PackageItemInline(admin.TabularInline):
     autocomplete_fields = ("item",)
 
 
+class PackageImageInline(admin.TabularInline):
+    model = PackageImage
+    extra = 1
+
+
 @admin.register(Package)
 class PackageAdmin(admin.ModelAdmin):
     list_display = (
         "name",
+        "collection",
         "mrp",
         "selling_price",
         "is_active",
@@ -210,6 +217,7 @@ class PackageAdmin(admin.ModelAdmin):
     )
 
     list_filter = (
+        "collection",
         "is_active",
         "is_featured",
     )
@@ -217,6 +225,7 @@ class PackageAdmin(admin.ModelAdmin):
     search_fields = (
         "name",
         "slug",
+        "collection__name",
     )
 
     ordering = (
@@ -234,6 +243,7 @@ class PackageAdmin(admin.ModelAdmin):
 
     inlines = (
         PackageItemInline,
+        PackageImageInline,
     )
 
     fieldsets = (
@@ -241,6 +251,7 @@ class PackageAdmin(admin.ModelAdmin):
             "Package Information",
             {
                 "fields": (
+                    "collection",
                     "name",
                     "slug",
                     "short_description",
