@@ -199,6 +199,12 @@ class Item(models.Model):
 
 
 class Package(models.Model):
+
+    collection = models.ForeignKey(
+    Collection,
+    on_delete=models.PROTECT,
+    related_name="packages",
+    )
     name = models.CharField(
         max_length=200,
     )
@@ -312,3 +318,56 @@ class PackageItem(models.Model):
 
     def __str__(self):
         return f"{self.package.name} - {self.item.name}"
+
+
+
+class ItemImage(models.Model):
+    item = models.ForeignKey(
+        Item,
+        on_delete=models.CASCADE,
+        related_name="images",
+    )
+
+    image = models.ImageField(
+        upload_to="items/",
+    )
+
+    is_primary = models.BooleanField(
+        default=False,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = ["-is_primary", "created_at"]
+
+    def __str__(self):
+        return f"{self.item.name} image"
+
+
+class PackageImage(models.Model):
+    package = models.ForeignKey(
+        Package,
+        on_delete=models.CASCADE,
+        related_name="images",
+    )
+
+    image = models.ImageField(
+        upload_to="packages/",
+    )
+
+    is_primary = models.BooleanField(
+        default=False,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = ["-is_primary", "created_at"]
+
+    def __str__(self):
+        return f"{self.package.name} image"

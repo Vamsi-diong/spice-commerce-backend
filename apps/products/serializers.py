@@ -4,7 +4,9 @@ from .models import (
     Collection,
     Category,
     Item,
+    ItemImage,
     Package,
+    PackageImage,
     PackageItem,
 )
 
@@ -36,6 +38,16 @@ class CategorySerializer(serializers.ModelSerializer):
         )
 
 
+class ItemImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItemImage
+        fields = (
+            "id",
+            "image",
+            "is_primary",
+        )
+
+
 class ItemListSerializer(serializers.ModelSerializer):
     collection = serializers.CharField(
         source="category.collection.name",
@@ -57,6 +69,11 @@ class ItemListSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    images = ItemImageSerializer(
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = Item
         fields = (
@@ -75,6 +92,7 @@ class ItemListSerializer(serializers.ModelSerializer):
             "collection_slug",
             "category",
             "category_slug",
+            "images",
         )
 
 
@@ -99,6 +117,11 @@ class ItemDetailSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    images = ItemImageSerializer(
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = Item
         fields = (
@@ -119,6 +142,17 @@ class ItemDetailSerializer(serializers.ModelSerializer):
             "collection_slug",
             "category",
             "category_slug",
+            "images",
+        )
+
+
+class PackageImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PackageImage
+        fields = (
+            "id",
+            "image",
+            "is_primary",
         )
 
 
@@ -137,6 +171,21 @@ class PackageItemSerializer(serializers.ModelSerializer):
 
 
 class PackageListSerializer(serializers.ModelSerializer):
+    collection = serializers.CharField(
+        source="collection.name",
+        read_only=True,
+    )
+
+    collection_slug = serializers.CharField(
+        source="collection.slug",
+        read_only=True,
+    )
+
+    images = PackageImageSerializer(
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = Package
         fields = (
@@ -149,10 +198,28 @@ class PackageListSerializer(serializers.ModelSerializer):
             "mrp",
             "selling_price",
             "is_featured",
+            "collection",
+            "collection_slug",
+            "images",
         )
 
 
 class PackageDetailSerializer(serializers.ModelSerializer):
+    collection = serializers.CharField(
+        source="collection.name",
+        read_only=True,
+    )
+
+    collection_slug = serializers.CharField(
+        source="collection.slug",
+        read_only=True,
+    )
+
+    images = PackageImageSerializer(
+        many=True,
+        read_only=True,
+    )
+
     package_items = PackageItemSerializer(
         many=True,
         read_only=True,
@@ -171,5 +238,8 @@ class PackageDetailSerializer(serializers.ModelSerializer):
             "mrp",
             "selling_price",
             "is_featured",
+            "collection",
+            "collection_slug",
+            "images",
             "package_items",
         )
