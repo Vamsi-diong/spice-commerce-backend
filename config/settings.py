@@ -28,8 +28,9 @@ SECRET_KEY = config("DJANGO_SECRET_KEY")
 # DEBUG = True
 DEBUG = config("DJANGO_DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = [
+    "the-black-taj-spices.vercel.app",
+]
 
 # Application definition
 from datetime import timedelta
