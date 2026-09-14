@@ -4,8 +4,9 @@ from .models import (
     Collection,
     Category,
     Item,
+    ItemImage,
     Package,
-    PackageItem
+    PackageItem,
 )
 
 
@@ -67,6 +68,11 @@ class CategoryAdmin(admin.ModelAdmin):
     }
 
 
+class ItemImageInline(admin.TabularInline):
+    model = ItemImage
+    extra = 1
+
+
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
     list_display = (
@@ -109,6 +115,10 @@ class ItemAdmin(admin.ModelAdmin):
     readonly_fields = (
         "created_at",
         "updated_at",
+    )
+
+    inlines = (
+        ItemImageInline,
     )
 
     fieldsets = (

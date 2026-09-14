@@ -4,6 +4,7 @@ from .models import (
     Collection,
     Category,
     Item,
+    ItemImage,
     Package,
     PackageItem,
 )
@@ -36,6 +37,16 @@ class CategorySerializer(serializers.ModelSerializer):
         )
 
 
+class ItemImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ItemImage
+        fields = (
+            "id",
+            "image",
+            "is_primary",
+        )
+
+
 class ItemListSerializer(serializers.ModelSerializer):
     collection = serializers.CharField(
         source="category.collection.name",
@@ -57,6 +68,11 @@ class ItemListSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    images = ItemImageSerializer(
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = Item
         fields = (
@@ -75,6 +91,7 @@ class ItemListSerializer(serializers.ModelSerializer):
             "collection_slug",
             "category",
             "category_slug",
+            "images",
         )
 
 
@@ -99,6 +116,11 @@ class ItemDetailSerializer(serializers.ModelSerializer):
         read_only=True,
     )
 
+    images = ItemImageSerializer(
+        many=True,
+        read_only=True,
+    )
+
     class Meta:
         model = Item
         fields = (
@@ -119,6 +141,7 @@ class ItemDetailSerializer(serializers.ModelSerializer):
             "collection_slug",
             "category",
             "category_slug",
+            "images",
         )
 
 
