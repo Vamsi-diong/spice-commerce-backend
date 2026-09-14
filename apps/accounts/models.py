@@ -31,9 +31,9 @@ class UserManager(BaseUserManager):
 
         return user
 
-    def create_superuser(self, email, password=None, **extra_fields):
-        if not email:
-            raise ValueError("Superuser must have an email.")
+    def create_superuser(self, phone_number, password=None, **extra_fields):
+        if not phone_number:
+            raise ValueError("Superuser must have a phone number.")
 
         if not password:
             raise ValueError("Superuser must have a password.")
@@ -50,7 +50,7 @@ class UserManager(BaseUserManager):
             raise ValueError("Superuser must have is_superuser=True.")
 
         user = self.model(
-            email=email,
+            phone_number=phone_number,
             **extra_fields,
         )
 
