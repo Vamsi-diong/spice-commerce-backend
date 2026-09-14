@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Cart, CartItem,Order, OrderItem, Payment,OrderStatusHistory,Refund
+from .models import Cart, CartItem,Order, OrderItem, Payment,OrderStatusHistory,Refund,Promotion, Review
 
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -122,6 +122,441 @@ class CheckoutSerializer(serializers.Serializer):
         min_value=1,
     )
 
+    promotion_code = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+    )
+
+
+class PromotionSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Promotion
+
+        fields = (
+            "id",
+            "code",
+            "discount_type",
+            "discount_value",
+            "minimum_order_amount",
+            "maximum_discount",
+            "start_date",
+            "end_date",
+            "usage_limit",
+            "per_customer_limit",
+            "used_count",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+
+        read_only_fields = (
+            "id",
+            "used_count",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate_code(self, value):
+        return value.strip().upper()
+
+    def validate(self, attrs):
+
+        discount_type = attrs.get(
+            "discount_type",
+            getattr(
+                self.instance,
+                "discount_type",
+                None,
+            ),
+        )
+
+        discount_value = attrs.get(
+            "discount_value",
+            getattr(
+                self.instance,
+                "discount_value",
+                None,
+            ),
+        )
+
+        minimum_order_amount = attrs.get(
+            "minimum_order_amount",
+            getattr(
+                self.instance,
+                "minimum_order_amount",
+                0,
+            ),
+        )
+
+        maximum_discount = attrs.get(
+            "maximum_discount",
+            getattr(
+                self.instance,
+                "maximum_discount",
+                None,
+            ),
+        )
+
+        start_date = attrs.get(
+            "start_date",
+            getattr(
+                self.instance,
+                "start_date",
+                None,
+            ),
+        )
+
+        end_date = attrs.get(
+            "end_date",
+            getattr(
+                self.instance,
+                "end_date",
+                None,
+            ),
+        )
+
+        usage_limit = attrs.get(
+            "usage_limit",
+            getattr(
+                self.instance,
+                "usage_limit",
+                None,
+            ),
+        )
+
+        per_customer_limit = attrs.get(
+            "per_customer_limit",
+            getattr(
+                self.instance,
+                "per_customer_limit",
+                1,
+            ),
+        )
+
+        if discount_value is not None and discount_value <= 0:
+            raise serializers.ValidationError(
+                {
+                    "discount_value": (
+                        "Discount value must be greater than 0."
+                    )
+                }
+            )
+
+        if (
+            minimum_order_amount is not None
+            and minimum_order_amount < 0
+        ):
+            raise serializers.ValidationError(
+                {
+                    "minimum_order_amount": (
+                        "Minimum order amount cannot be negative."
+                    )
+                }
+            )
+
+        if (
+            maximum_discount is not None
+            and maximum_discount <= 0
+        ):
+            raise serializers.ValidationError(
+                {
+                    "maximum_discount": (
+                        "Maximum discount must be greater than 0."
+                    )
+                }
+            )
+
+        if (
+            discount_type == Promotion.DiscountType.PERCENTAGE
+            and discount_value is not None
+            and discount_value > 100
+        ):
+            raise serializers.ValidationError(
+                {
+                    "discount_value": (
+                        "Percentage discount cannot exceed 100."
+                    )
+                }
+            )
+
+        if (
+            start_date
+            and end_date
+            and end_date <= start_date
+        ):
+            raise serializers.ValidationError(
+                {
+                    "end_date": (
+                        "End date must be after start date."
+                    )
+                }
+            )
+
+        if usage_limit is not None and usage_limit < 1:
+            raise serializers.ValidationError(
+                {
+                    "usage_limit": (
+                        "Usage limit must be at least 1."
+                    )
+                }
+            )
+
+        if (
+            per_customer_limit is not None
+            and per_customer_limit < 1
+        ):
+            raise serializers.ValidationError(
+                {
+                    "per_customer_limit": (
+                        "Per-customer limit must be at least 1."
+                    )
+                }
+            )
+
+
+        return attrs
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+
+    item_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        min_value=1,
+    )
+
+    package_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        min_value=1,
+    )
+
+    product_type = serializers.SerializerMethodField()
+
+    product_id = serializers.SerializerMethodField()
+
+    product_name = serializers.SerializerMethodField()
+
+    customer_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Review
+
+        fields = (
+            "id",
+            "item_id",
+            "package_id",
+            "product_type",
+            "product_id",
+            "product_name",
+            "customer_name",
+            "rating",
+            "review",
+            "is_approved",
+            "created_at",
+            "updated_at",
+        )
+
+        read_only_fields = (
+            "id",
+            "product_type",
+            "product_id",
+            "product_name",
+            "customer_name",
+            "is_approved",
+            "created_at",
+            "updated_at",
+        )
+
+    def validate(self, attrs):
+
+        item_id = attrs.get("item_id")
+        package_id = attrs.get("package_id")
+
+        if item_id and package_id:
+            raise serializers.ValidationError(
+                "Provide either item_id or package_id, not both."
+            )
+
+        if not item_id and not package_id:
+            raise serializers.ValidationError(
+                "You must provide either item_id or package_id."
+            )
+
+        customer = self.context["request"].user
+
+        order_items = OrderItem.objects.filter(
+            order__customer=customer,
+            order__status=Order.Status.DELIVERED,
+        )
+
+        if item_id:
+            purchased = order_items.filter(
+                item_id=item_id,
+            ).exists()
+
+            if not purchased:
+                raise serializers.ValidationError(
+                    "You can review an item only after receiving it."
+                )
+
+        if package_id:
+            purchased = order_items.filter(
+                package_id=package_id,
+            ).exists()
+
+            if not purchased:
+                raise serializers.ValidationError(
+                    "You can review a package only after receiving it."
+                )
+
+        existing_review = Review.objects.filter(
+            customer=customer,
+        )
+
+        if item_id:
+            existing_review = existing_review.filter(
+                item_id=item_id,
+            )
+
+        if package_id:
+            existing_review = existing_review.filter(
+                package_id=package_id,
+            )
+
+        if existing_review.exists():
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "You have already reviewed this product."
+                    )
+                }
+            )
+
+        return attrs
+
+    def create(self, validated_data):
+
+        item_id = validated_data.pop("item_id", None)
+        package_id = validated_data.pop("package_id", None)
+
+        request = self.context["request"]
+
+        return Review.objects.create(
+            customer=request.user,
+            item_id=item_id,
+            package_id=package_id,
+            **validated_data,
+        )
+
+    def get_product_type(self, obj):
+
+        if obj.item:
+            return "ITEM"
+
+        return "PACKAGE"
+
+    def get_product_id(self, obj):
+
+        if obj.item:
+            return obj.item.id
+
+        return obj.package.id
+
+    def get_product_name(self, obj):
+
+        if obj.item:
+            return obj.item.name
+
+        return obj.package.name
+
+    def get_customer_name(self, obj):
+
+        full_name = (
+            f"{obj.customer.first_name} "
+            f"{obj.customer.last_name}"
+        ).strip()
+
+        return (
+            full_name
+            or obj.customer.phone_number
+        )
+
+
+class AdminReviewSerializer(serializers.ModelSerializer):
+
+    product_type = serializers.SerializerMethodField()
+
+    product_id = serializers.SerializerMethodField()
+
+    product_name = serializers.SerializerMethodField()
+
+    customer_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Review
+
+        fields = (
+            "id",
+            "product_type",
+            "product_id",
+            "product_name",
+            "customer_name",
+            "rating",
+            "review",
+            "is_approved",
+            "created_at",
+            "updated_at",
+        )
+
+        read_only_fields = (
+            "id",
+            "product_type",
+            "product_id",
+            "product_name",
+            "customer_name",
+            "rating",
+            "review",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_product_type(self, obj):
+
+        if obj.item:
+            return "ITEM"
+
+        return "PACKAGE"
+
+    def get_product_id(self, obj):
+
+        if obj.item:
+            return obj.item.id
+
+        return obj.package.id
+
+    def get_product_name(self, obj):
+
+        if obj.item:
+            return obj.item.name
+
+        return obj.package.name
+
+    def get_customer_name(self, obj):
+
+        full_name = (
+            f"{obj.customer.first_name} "
+            f"{obj.customer.last_name}"
+        ).strip()
+
+        return (
+            full_name
+            or obj.customer.phone_number
+        )
+
 
 class OrderListSerializer(serializers.ModelSerializer):
     total_items = serializers.SerializerMethodField()
@@ -135,6 +570,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             "total_items",
             "subtotal",
             "delivery_charge",
+            "discount_amount",
             "total_amount",
             "created_at",
         )
@@ -201,6 +637,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "total_items",
             "payment",
             "subtotal",
+            "discount_amount",
             "delivery_charge",
             "total_amount",
             "created_at",
@@ -248,6 +685,7 @@ class AdminOrderListSerializer(serializers.ModelSerializer):
             "status",
             "total_items",
             "subtotal",
+            "discount_amount",
             "delivery_charge",
             "total_amount",
             "created_at",
@@ -327,6 +765,7 @@ class AdminOrderDetailSerializer(serializers.ModelSerializer):
             "order_items",
             "total_items",
             "subtotal",
+            "discount_amount",
             "delivery_charge",
             "total_amount",
             "status_history",
@@ -576,3 +1015,18 @@ class AdminRefundDetailSerializer(serializers.ModelSerializer):
             "email": customer.email,
             "phone_number": customer.phone_number,
         }
+
+
+class AdminReviewModerationSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Review
+
+        fields = (
+            "id",
+            "is_approved",
+        )
+
+        read_only_fields = (
+            "id",
+        )

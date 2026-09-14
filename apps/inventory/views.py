@@ -8,9 +8,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from .filters import AdminOrderFilter,AdminPaymentFilter,AdminRefundFilter
 from collections import defaultdict
+from django.utils import timezone
 from apps.products.models import Item, Package
 from .pagination import AdminListPagination
-from .models import Cart, CartItem, Order, OrderItem,Payment,OrderStatusHistory,Refund
+from .models import Cart, CartItem, Order, OrderItem,Payment,OrderStatusHistory,Refund, Promotion,PromotionUsage, Review
 from .serializers import (
     AddCartItemSerializer,
     CartSerializer,
@@ -26,7 +27,11 @@ from .serializers import (
     AdminPaymentDetailSerializer,
     OrderStatusHistorySerializer,
     AdminRefundDetailSerializer,
-    AdminRefundListSerializer
+    AdminRefundListSerializer,
+    PromotionSerializer,
+    ReviewSerializer,
+    AdminReviewSerializer,
+    AdminReviewModerationSerializer
 )
 
 
@@ -425,18 +430,130 @@ class CheckoutAPIView(generics.GenericAPIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+
         # -------------------------------------------------
-        # STEP 2: FREE DELIVERY
+        # STEP 2: VALIDATE PROMOTION
+        # -------------------------------------------------
+
+        promotion = None
+        discount_amount = Decimal("0.00")
+
+        promotion_code = serializer.validated_data.get(
+            "promotion_code"
+        )
+
+        if promotion_code:
+
+            promotion = Promotion.objects.select_for_update().filter(
+                code=promotion_code.upper(),
+                is_active=True,
+            ).first()
+
+            if not promotion:
+                return Response(
+                    {
+                        "detail": "Invalid or inactive promotion code."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            now = timezone.now()
+
+            if now < promotion.start_date:
+                return Response(
+                    {
+                        "detail": "This promotion is not active yet."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if now > promotion.end_date:
+                return Response(
+                    {
+                        "detail": "This promotion has expired."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if (
+                promotion.usage_limit is not None
+                and promotion.used_count >= promotion.usage_limit
+            ):
+                return Response(
+                    {
+                        "detail": "This promotion usage limit has been reached."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if subtotal < promotion.minimum_order_amount:
+                return Response(
+                    {
+                        "detail": (
+                            f"Minimum order amount for this promotion "
+                            f"is ₹{promotion.minimum_order_amount}."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            customer_usage_count = PromotionUsage.objects.filter(
+                promotion=promotion,
+                customer=request.user,
+            ).count()
+
+            if (
+                promotion.per_customer_limit is not None
+                and customer_usage_count >= promotion.per_customer_limit
+            ):
+                return Response(
+                    {
+                        "detail": (
+                            "You have already reached the usage limit "
+                            "for this promotion."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if promotion.discount_type == Promotion.DiscountType.PERCENTAGE:
+
+                discount_amount = (
+                    subtotal
+                    * promotion.discount_value
+                    / Decimal("100")
+                )
+
+                if promotion.maximum_discount is not None:
+                    discount_amount = min(
+                        discount_amount,
+                        promotion.maximum_discount,
+                    )
+
+            elif promotion.discount_type == Promotion.DiscountType.FIXED:
+
+                discount_amount = promotion.discount_value
+
+            discount_amount = min(
+                discount_amount,
+                subtotal,
+            )
+
+
+        # -------------------------------------------------
+        # STEP 3: FREE DELIVERY
         # -------------------------------------------------
 
         delivery_charge = Decimal("0.00")
 
         total_amount = (
-            subtotal + delivery_charge
+            subtotal
+            - discount_amount
+            + delivery_charge
         )
 
         # -------------------------------------------------
-        # STEP 3: CREATE ORDER
+        # STEP 4: CREATE ORDER
         # -------------------------------------------------
 
         order = Order.objects.create(
@@ -457,12 +574,35 @@ class CheckoutAPIView(generics.GenericAPIView):
             status=Order.Status.PENDING,
 
             subtotal=subtotal,
+            discount_amount=discount_amount,
             delivery_charge=delivery_charge,
             total_amount=total_amount,
         )
 
         # -------------------------------------------------
-        # STEP 4: CREATE ORDER ITEMS
+        # STEP 5: CREATE PROMOTION USAGE
+        # -------------------------------------------------
+
+        if promotion:
+
+            PromotionUsage.objects.create(
+                promotion=promotion,
+                customer=request.user,
+                order=order,
+                discount_amount=discount_amount,
+            )
+
+            promotion.used_count += 1
+
+            promotion.save(
+                update_fields=[
+                    "used_count",
+                ]
+            )
+
+
+        # -------------------------------------------------
+        # STEP 6: CREATE ORDER ITEMS
         # -------------------------------------------------
 
         for checkout_item in checkout_items:
@@ -497,7 +637,7 @@ class CheckoutAPIView(generics.GenericAPIView):
             )
 
         # -------------------------------------------------
-        # STEP 5: REDUCE STOCK
+        # STEP 7: REDUCE STOCK
         # -------------------------------------------------
 
         for item_id, quantity_required in required_stock.items():
@@ -513,13 +653,13 @@ class CheckoutAPIView(generics.GenericAPIView):
             )
 
         # -------------------------------------------------
-        # STEP 6: CLEAR CART
+        # STEP 8: CLEAR CART
         # -------------------------------------------------
 
         cart.cart_items.all().delete()
 
         # -------------------------------------------------
-        # STEP 7: RETURN ORDER
+        # STEP 9: RETURN ORDER
         # -------------------------------------------------
 
         return Response(
@@ -549,9 +689,8 @@ class CheckoutAPIView(generics.GenericAPIView):
                 },
 
                 "subtotal": order.subtotal,
-                "delivery_charge": (
-                    order.delivery_charge
-                ),
+                "discount_amount": order.discount_amount,
+                "delivery_charge": order.delivery_charge,
                 "total_amount": order.total_amount,
 
                 "items": [
@@ -688,64 +827,71 @@ class CancelOrderAPIView(generics.GenericAPIView):
         # RESTORE STOCK
         # -------------------------------------------------
 
-        restore_stock = {}
+        # Stock was already restored when an online payment failed.
+        # Do not restore it again during cancellation.
+        stock_already_restored = (
+            payment
+            and payment.status == Payment.Status.FAILED
+        )
 
-        for order_item in order.order_items.all():
+        if not stock_already_restored:
 
-            # Individual item
-            if order_item.item:
+            restore_stock = {}
 
-                item_id = order_item.item.id
+            for order_item in order.order_items.all():
 
-                restore_stock[item_id] = (
-                    restore_stock.get(item_id, 0)
-                    + order_item.quantity
-                )
+                # Individual item
+                if order_item.item:
 
-            # Package
-            elif order_item.package:
-
-                for package_item in (
-                    order_item.package.package_items.all()
-                ):
-
-                    item_id = package_item.item_id
-
-                    stock_to_restore = (
-                        package_item.quantity
-                        * order_item.quantity
-                    )
+                    item_id = order_item.item.id
 
                     restore_stock[item_id] = (
                         restore_stock.get(item_id, 0)
-                        + stock_to_restore
+                        + order_item.quantity
                     )
 
+                # Package
+                elif order_item.package:
 
-        # Lock the affected items
-        locked_items = {
-            item.id: item
-            for item in Item.objects.select_for_update().filter(
-                id__in=restore_stock.keys(),
-            )
-        }
+                    for package_item in (
+                        order_item.package.package_items.all()
+                    ):
 
+                        item_id = package_item.item_id
 
-        # Restore stock
-        for item_id, quantity_to_restore in restore_stock.items():
+                        stock_to_restore = (
+                            package_item.quantity
+                            * order_item.quantity
+                        )
 
-            item = locked_items.get(item_id)
+                        restore_stock[item_id] = (
+                            restore_stock.get(item_id, 0)
+                            + stock_to_restore
+                        )
 
-            if not item:
-                continue
+            # Lock the affected items
+            locked_items = {
+                item.id: item
+                for item in Item.objects.select_for_update().filter(
+                    id__in=restore_stock.keys(),
+                )
+            }
 
-            item.stock_quantity += quantity_to_restore
+            # Restore stock
+            for item_id, quantity_to_restore in restore_stock.items():
 
-            item.save(
-                update_fields=[
-                    "stock_quantity",
-                ]
-            )
+                item = locked_items.get(item_id)
+
+                if not item:
+                    continue
+
+                item.stock_quantity += quantity_to_restore
+
+                item.save(
+                    update_fields=[
+                        "stock_quantity",
+                    ]
+                )
 
         # Change order status
 # -------------------------------------------------
@@ -2326,6 +2472,68 @@ class AdminRefundAPIView(generics.GenericAPIView):
             ]
         )
 
+
+        # ---------------------------------------------
+        # RESTORE STOCK
+        # ---------------------------------------------
+
+        restore_stock = {}
+
+        for order_item in order.order_items.all():
+
+            # Individual item
+            if order_item.item:
+
+                item_id = order_item.item.id
+
+                restore_stock[item_id] = (
+                    restore_stock.get(item_id, 0)
+                    + order_item.quantity
+                )
+
+            # Package
+            elif order_item.package:
+
+                for package_item in (
+                    order_item.package.package_items.all()
+                ):
+
+                    item_id = package_item.item_id
+
+                    stock_to_restore = (
+                        package_item.quantity
+                        * order_item.quantity
+                    )
+
+                    restore_stock[item_id] = (
+                        restore_stock.get(item_id, 0)
+                        + stock_to_restore
+                    )
+
+        # Lock affected items
+        locked_items = {
+            item.id: item
+            for item in Item.objects.select_for_update().filter(
+                id__in=restore_stock.keys(),
+            )
+        }
+
+        # Restore stock
+        for item_id, quantity_to_restore in restore_stock.items():
+
+            item = locked_items.get(item_id)
+
+            if not item:
+                continue
+
+            item.stock_quantity += quantity_to_restore
+
+            item.save(
+                update_fields=[
+                    "stock_quantity",
+                ]
+            )
+
         # ---------------------------------------------
         # UPDATE ORDER
         # ---------------------------------------------
@@ -2426,3 +2634,129 @@ class AdminRefundDetailAPIView(generics.RetrieveAPIView):
                 "processed_by",
             )
         )
+
+
+class AdminPromotionListCreateAPIView(generics.ListCreateAPIView):
+
+    permission_classes = (
+        IsOrderManagementStaff,
+    )
+
+    serializer_class = PromotionSerializer
+
+    pagination_class = AdminListPagination
+
+    filter_backends = (
+        DjangoFilterBackend,
+        filters.SearchFilter,
+    )
+
+    search_fields = (
+        "id",
+        "code",
+    )
+
+    def get_queryset(self):
+        return Promotion.objects.all().order_by(
+            "-created_at"
+        )
+
+class AdminPromotionDetailAPIView(
+    generics.RetrieveUpdateAPIView
+    ):
+
+    permission_classes = (
+        IsOrderManagementStaff,
+    )
+
+    serializer_class = PromotionSerializer
+
+    lookup_url_kwarg = "promotion_id"
+
+    def get_queryset(self):
+        return Promotion.objects.all()
+
+
+class ReviewCreateAPIView(generics.CreateAPIView):
+
+    permission_classes = (
+        permissions.IsAuthenticated,
+    )
+
+    serializer_class = ReviewSerializer
+
+class ReviewListCreateAPIView(
+    generics.ListCreateAPIView
+    ):
+
+    serializer_class = ReviewSerializer
+
+    def get_permissions(self):
+
+        if self.request.method == "POST":
+            return [
+                permissions.IsAuthenticated()
+            ]
+
+        return [
+            permissions.AllowAny()
+        ]
+
+    def get_queryset(self):
+
+        queryset = Review.objects.filter(
+            is_approved=True,
+        ).select_related(
+            "item",
+            "package",
+            "customer",
+        )
+
+        item_id = self.request.query_params.get("item_id")
+        package_id = self.request.query_params.get("package_id")
+
+        if item_id:
+            queryset = queryset.filter(
+                item_id=item_id,
+            )
+
+        if package_id:
+            queryset = queryset.filter(
+                package_id=package_id,
+            )
+
+        return queryset
+
+
+class AdminReviewListAPIView(generics.ListAPIView):
+
+    permission_classes = (
+        IsOrderManagementStaff,
+    )
+
+    serializer_class = AdminReviewSerializer
+
+    def get_queryset(self):
+
+        return Review.objects.select_related(
+            "item",
+            "package",
+            "customer",
+        ).order_by(
+            "-created_at"
+        )
+
+
+class AdminReviewModerationAPIView(
+    generics.UpdateAPIView
+    ):
+
+    permission_classes = (
+        IsOrderManagementStaff,
+    )
+
+    serializer_class = AdminReviewModerationSerializer
+
+    queryset = Review.objects.all()
+
+    lookup_url_kwarg = "review_id"

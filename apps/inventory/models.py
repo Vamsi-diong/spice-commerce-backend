@@ -2,7 +2,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
-
 from apps.products.models import Item, Package
 from apps.accounts.models import Address
 
@@ -202,6 +201,12 @@ class Order(models.Model):
         decimal_places=2,
     )
 
+    discount_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
     delivery_charge = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -241,6 +246,128 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order #{self.id} - {self.customer}"
+
+
+
+class Promotion(models.Model):
+
+    class DiscountType(models.TextChoices):
+        PERCENTAGE = "PERCENTAGE", "Percentage"
+        FIXED = "FIXED", "Fixed Amount"
+
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        db_index=True,
+    )
+
+    discount_type = models.CharField(
+        max_length=20,
+        choices=DiscountType.choices,
+    )
+
+    discount_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
+
+    minimum_order_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+
+    maximum_discount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+
+    start_date = models.DateTimeField()
+
+    end_date = models.DateTimeField()
+
+    usage_limit = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+
+    per_customer_limit = models.PositiveIntegerField(
+        default=1,
+    )
+
+    used_count = models.PositiveIntegerField(
+        default=0,
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.code
+
+
+class PromotionUsage(models.Model):
+    promotion = models.ForeignKey(
+        Promotion,
+        on_delete=models.PROTECT,
+        related_name="usages",
+    )
+
+    customer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="promotion_usages",
+    )
+
+    order = models.OneToOneField(
+        Order,
+        on_delete=models.PROTECT,
+        related_name="promotion_usage",
+    )
+
+    discount_amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+        indexes = [
+            models.Index(
+                fields=["promotion", "customer"],
+                name="promotion_customer_idx",
+            ),
+            models.Index(
+                fields=["customer", "-created_at"],
+                name="promotion_usage_customer_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.promotion.code} - "
+            f"Order #{self.order.id}"
+        )
 
 
 class OrderItem(models.Model):
@@ -517,4 +644,91 @@ class Refund(models.Model):
     def __str__(self):
         return (
             f"Refund - Payment #{self.payment.id}"
+        )
+
+
+class Review(models.Model):
+
+    item = models.ForeignKey(
+        "products.Item",
+        on_delete=models.CASCADE,
+        related_name="reviews",
+        null=True,
+        blank=True,
+    )
+
+    package = models.ForeignKey(
+        "products.Package",
+        on_delete=models.CASCADE,
+        related_name="reviews",
+        null=True,
+        blank=True,
+    )
+
+    customer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="reviews",
+    )
+
+    rating = models.PositiveSmallIntegerField()
+
+    review = models.TextField(
+        blank=True,
+    )
+
+    is_approved = models.BooleanField(
+        default=False,
+        db_index=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(item__isnull=False)
+                    | models.Q(package__isnull=False)
+                ),
+                name="review_has_product",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(item__isnull=True)
+                    | models.Q(package__isnull=True)
+                ),
+                name="review_only_one_product",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(rating__gte=1, rating__lte=5),
+                name="review_rating_1_to_5",
+            ),
+            models.UniqueConstraint(
+                fields=["customer", "item"],
+                condition=models.Q(item__isnull=False),
+                name="unique_customer_item_review",
+            ),
+            models.UniqueConstraint(
+                fields=["customer", "package"],
+                condition=models.Q(package__isnull=False),
+                name="unique_customer_package_review",
+            ),
+        ]
+
+    def __str__(self):
+        product_name = self.item or self.package
+
+        return (
+            f"{self.customer} - "
+            f"{product_name} - "
+            f"{self.rating}"
         )
