@@ -34,7 +34,7 @@ ALLOWED_HOSTS = [
     "localhost",
 ]
 
-SECURE_SSL_REDIRECT = True
+SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
@@ -115,7 +115,7 @@ DATABASES = {
         "HOST": config("DB_HOST"),
         "PORT": config("DB_PORT"),
         "OPTIONS": {
-            "sslmode": "require",
+            "sslmode": config("DB_SSLMODE", default="require"),
         },
     }
 }
