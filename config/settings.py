@@ -160,6 +160,32 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Media files
+if DEBUG and not config("USE_SUPABASE_STORAGE", default=False, cast=bool):
+    MEDIA_URL = "/media/"
+    MEDIA_ROOT = BASE_DIR / "media"
+else:
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+            "OPTIONS": {
+                "access_key": config("SUPABASE_S3_ACCESS_KEY_ID"),
+                "secret_key": config("SUPABASE_S3_SECRET_ACCESS_KEY"),
+                "bucket_name": config(
+                    "SUPABASE_STORAGE_BUCKET",
+                    default="product-images",
+                ),
+                "endpoint_url": config("SUPABASE_S3_ENDPOINT_URL"),
+                "region_name": config("SUPABASE_S3_REGION"),
+                "addressing_style": "path",
+                "querystring_auth": False,
+            },
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
