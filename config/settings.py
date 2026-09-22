@@ -181,6 +181,7 @@ else:
                     default="product-images",
                 ),
                 "endpoint_url": config("SUPABASE_S3_ENDPOINT_URL"),
+                "custom_domain": "vxvvookmhqmbawtbpyik.supabase.co/storage/v1/object/public/product-images",
                 "region_name": config("SUPABASE_S3_REGION"),
                 "addressing_style": "path",
                 "querystring_auth": False,
