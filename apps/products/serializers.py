@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from .models import (
@@ -39,6 +40,8 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ItemImageSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
+
     class Meta:
         model = ItemImage
         fields = (
@@ -47,6 +50,11 @@ class ItemImageSerializer(serializers.ModelSerializer):
             "is_primary",
         )
 
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+
+        return f"{settings.SUPABASE_PUBLIC_STORAGE_URL}/{obj.image.name}"
 
 class ItemListSerializer(serializers.ModelSerializer):
     collection = serializers.CharField(

@@ -199,7 +199,9 @@ else:
             "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
         },
     }
-
+SUPABASE_PUBLIC_STORAGE_URL = config(
+    "SUPABASE_PUBLIC_STORAGE_URL"
+)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
