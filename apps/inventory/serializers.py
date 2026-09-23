@@ -8,7 +8,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     product_id = serializers.SerializerMethodField()
     product_name = serializers.SerializerMethodField()
     product_slug = serializers.SerializerMethodField()
-    primary_image = serializers.SerializerMethodField()
+    product_image = serializers.SerializerMethodField()
 
     unit_price = serializers.DecimalField(
         max_digits=10,
@@ -31,7 +31,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_id",
             "product_name",
             "product_slug",
-            "primary_image",
+            "product_image",
             "quantity",
             "unit_price",
             "total_price",
@@ -54,18 +54,18 @@ class CartItemSerializer(serializers.ModelSerializer):
     def get_product_slug(self, obj):
         return obj.product.slug
 
-    def get_primary_image(self, obj):
+    def get_product_image(self, obj):
         if not obj.item:
             return None
 
-        primary_image = obj.item.images.filter(
+        product_image = obj.item.images.filter(
             is_primary=True
         ).first()
 
-        if not primary_image or not primary_image.image:
+        if not product_image or not product_image.image:
             return None
 
-        return f"{settings.SUPABASE_PUBLIC_STORAGE_URL}/{primary_image.image.name}"
+        return f"{settings.SUPABASE_PUBLIC_STORAGE_URL}/{product_image.image.name}"
 
 
 class CartSerializer(serializers.ModelSerializer):
