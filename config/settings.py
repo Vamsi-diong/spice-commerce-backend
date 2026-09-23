@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from decouple import config
+from botocore.config import Config
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -124,6 +126,8 @@ DATABASES = {
         },
     }
 }
+
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -160,6 +164,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+
 # Media files
 if DEBUG and not config("USE_SUPABASE_STORAGE", default=False, cast=bool):
     MEDIA_URL = "/media/"
@@ -176,15 +181,27 @@ else:
                     default="product-images",
                 ),
                 "endpoint_url": config("SUPABASE_S3_ENDPOINT_URL"),
+                "custom_domain": "vxvvookmhqmbawtbpyik.supabase.co/storage/v1/object/public/product-images",
                 "region_name": config("SUPABASE_S3_REGION"),
                 "addressing_style": "path",
                 "querystring_auth": False,
+                "client_config": Config(
+                    signature_version="s3v4",
+                    s3={
+                        "addressing_style": "path",
+                    },
+                    request_checksum_calculation="when_required",
+                    response_checksum_validation="when_required",
+                ),
             },
         },
         "staticfiles": {
             "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
         },
     }
+SUPABASE_PUBLIC_STORAGE_URL = config(
+    "SUPABASE_PUBLIC_STORAGE_URL"
+)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
